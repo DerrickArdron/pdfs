@@ -1,0 +1,10 @@
+*.txt
+*.csv
+*.bak
+*.db
+*.xlsx
+__*
+*.pdf
+*.docx
+\scripts
+\lib
