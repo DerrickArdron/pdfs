@@ -6,5 +6,7 @@
 __*
 *.pdf
 *.docx
+*.zip
+~$*.py
 \scripts
 \lib

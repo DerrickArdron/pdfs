@@ -1,6 +1,8 @@
 import csv, PyPDF2, sqlite3, re, os
 import dasql
-
+DEBUG = True
+DEBUG_GLREF = ["2780356"]
+DEBUG_LODGE = ['L9222']
 dasql.csvToDb("advanced_current_members_by_mshp_status.csv","contacts.db","Members")
 dasql.csvToDb('lodges.csv','contacts.db','Lodges', outputToFile=False)
 dasql.createTable('contacts.db', 'Ranks', 'Glref, Provincial, UnitID, Rank, Start', 'Glref', 'Type', 'Provincial', 'UnitID', 'UnitName', 'Rank', 'Start', 'End')
@@ -16,38 +18,46 @@ date_regex = re.compile(r'\d{2}/\d{2}/\d{4}')
 os.system('cls')
 for root, dirs, files in os.walk(r".\Source"):
     for file in files:
-        print("Converting", file)
-        pdffileobj = open('.\\source\\' + file, 'rb')
-        pdfReader = PyPDF2.PdfFileReader(pdffileobj)
-        page_count = (pdfReader.numPages)
-        lodge_pdf_txt = open('Lodge.txt', 'w')
-        page_number = 0
-        while page_number < page_count:
-            pageObj = pdfReader.getPage(page_number)
-            page_content = pageObj.extractText()
-            lodge_pdf_txt.write(page_content)
-            page_number += 1
-        lodge_pdf_txt.close()
+        match =  DEBUG_LODGE[0]+' Career Summaries.pdf'
+        if DEBUG and file == match:
+            print('\nMatch!\n')
+            pdffileobj = open('.\\source\\' + file, 'rb')
+            pdfReader = PyPDF2.PdfFileReader(pdffileobj)
+            page_count = (pdfReader.numPages)
+            lodge_pdf_txt = open('Lodge.txt', 'w')
+            page_number = 0
+            while page_number < page_count:
+                pageObj = pdfReader.getPage(page_number)
+                page_content = pageObj.extractText()
+                lodge_pdf_txt.write(page_content)
+                page_number += 1
+            lodge_pdf_txt.close()
 
         # Open the file and initiate variables
-        print('Processing', file)
         lodge_pdf_txt = open('Lodge.txt', 'r')
         glref = ''
         office_type = ''
         pdf_section = ''
         prov_counter = -1
         loffice_counter = -1
+
         for line in lodge_pdf_txt:
-            if line.strip() == 'Provincial Ranks':
+            line = line.strip()
+            if line == 'Provincial Ranks':
                 pdf_section = 'Provincial Ranks'
-            elif line.strip() == 'Lodge Career':
+            elif line == 'Lodge Career':
                 pdf_section = 'Lodge Career'
-            elif line.strip() == 'Lodge Offices':
+            elif line == 'Lodge Offices':
                 pdf_section = 'Lodge Offices'
+            elif line == 'Lodge':
+                check_next_line = True
+            elif line == 'Offices' and check_next_line:
+                pdf_section = 'Lodge Offices'
+                check_next_line = False
             prov_counter -= 1
             loffice_counter -= 1
 
-            # Get te Glref
+            # Get the Glref
             if glref_regex.search(line):
                 line = line.strip()
                 stmt = 'SELECT "Gl ref" from Members where "Gl ref" = \'' + line +"'"
@@ -56,6 +66,7 @@ for root, dirs, files in os.walk(r".\Source"):
                 result = str(cur.fetchone())
                 if result.upper() != 'NONE':
                     glref = line
+                    print('glref', glref)
 
             # Process Provincial Ranks
             if line.strip() == 'Craft Rank':
@@ -75,13 +86,14 @@ for root, dirs, files in os.walk(r".\Source"):
                     end_date = ''
                 if pdf_section == 'Provincial Ranks':
                     stmt = 'SELECT "Glref" from Ranks where "Glref" = \'' + glref + "' AND \"Provincial\" = '" + provincial_rank + "' AND \"UnitID\" = '' AND \"Rank\" = '' AND \"Start\" = '" + start_date +"'"
-                    print ("L Office Statement",stmt)
                     cur.execute(stmt)
                     con.commit()
                     result = str(cur.fetchone())
-                    print ("Result", result)
                     if result.upper() == 'NONE':
                         dasql.dataAdder('Provincial','contacts.db', 'Ranks', Glref=glref, Type=office_type, Provincial=provincial_rank, UnitID='', UnitName='', Rank='', Start=start_date, End=end_date)
+                        if DEBUG and glref in DEBUG_GLREF:
+                            for char in line:
+                                print(char)
                 #office_type = ''
                 provincial_rank = ''
                 prov_counter = -1
@@ -89,6 +101,7 @@ for root, dirs, files in os.walk(r".\Source"):
 
             if pdf_section == "Lodge Offices" and lodge_id_regex.search(line):
                 line = line.strip()
+                print('Lodge Office',line)
                 stmt = 'SELECT "Lc name" from Lodges where "Lc number" = \'' + line +"'"
                 cur.execute(stmt)
                 con.commit()
@@ -106,7 +119,6 @@ for root, dirs, files in os.walk(r".\Source"):
                         loffice_counter = 9
                     else:
                         loffice_counter = 8
-                    # print(glref, pdf_section, lodge_id, lodge_name, loffice_counter)
                 else:
                     loffice_counter = -1
             if loffice_counter == 4:
